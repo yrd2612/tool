@@ -126,11 +126,60 @@
             background-color: #f8d7da;
             color: #721c24;
         }
+        .upload-form {
+            margin-bottom: 20px;
+            padding: 15px;
+            background-color: #f5f5f5;
+            border-radius: 5px;
+        }
+        .download-btn {
+            margin-top: 20px;
+            padding: 10px 20px;
+            background-color: #2196F3;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            transition: background-color 0.3s;
+        }
+        .download-btn:hover {
+            background-color: #1976D2;
+        }
+        .progress-info {
+            margin-top: 10px;
+            padding: 10px;
+            background-color: #e3f2fd;
+            border-radius: 4px;
+        }
     </style>
 </head>
 <body>
     <div class="header">
         <h1>Image Annotation Tool</h1>
+    </div>
+
+    <div class="upload-form">
+        <h2>Upload JSON File</h2>
+        <form id="uploadForm">
+            <div class="form-group">
+                <label for="email">Email:</label>
+                <input type="email" id="email" name="email" required placeholder="Enter your email">
+            </div>
+            <div class="form-group">
+                <label for="json_file">JSON File:</label>
+                <input type="file" id="json_file" name="json_file" accept=".json" required>
+            </div>
+            <button type="submit" class="btn">Upload</button>
+        </form>
+        <div id="uploadErrorMessage" style="color: red; margin-top: 10px; display: none;"></div>
+    </div>
+
+    <div class="progress-info" style="display: none;">
+        <h3>Progress Information</h3>
+        <p>Total Entries: <span id="totalEntries">0</span></p>
+        <p>Visited Entries: <span id="visitedEntries">0</span></p>
+        <p>Current Position: <span id="currentPosition">0 / 0</span></p>
+        <button id="downloadJson" class="download-btn">Download JSON</button>
     </div>
 
     <div class="json-form">
@@ -211,7 +260,7 @@
             let currentIndex = 0;
             let totalEntries = 0;
             let currentEntry = null;
-            let drawing = false;
+            let drawing = "false";
             let startX, startY, endX, endY;
             let context;
 
@@ -280,7 +329,7 @@
                     startX = (e.clientX - rect.left) * scaleX;
                     startY = (e.clientY - rect.top) * scaleY;
                     
-                    drawing = true;
+                    drawing = "true";
                     console.log(`Mouse down at client: (${e.clientX - rect.left}, ${e.clientY - rect.top}), scaled: (${startX}, ${startY})`);
                 });
 
@@ -314,7 +363,7 @@
                 imageCanvas.addEventListener('mouseup', function(e) {
                     if (!drawing) return;
                     
-                    drawing = false;
+                    drawing = "false";
                     
                     // Get the position relative to the canvas
                     const rect = imageCanvas.getBoundingClientRect();
@@ -398,7 +447,7 @@
                 const submitBtn = this.querySelector('button[type="submit"]');
                 const originalBtnText = submitBtn.textContent;
                 submitBtn.textContent = 'Loading...';
-                submitBtn.disabled = true;
+                submitBtn.disabled = "true";
                 loadErrorMessage.style.display = 'none';
                 
                 fetch('/load_json', {
@@ -412,7 +461,7 @@
                 .then(data => {
                     // Reset button state
                     submitBtn.textContent = originalBtnText;
-                    submitBtn.disabled = false;
+                    submitBtn.disabled = "false";
                     
                     if (data.success) {
                         currentIndex = data.current_index;
@@ -441,7 +490,7 @@
                 .catch(error => {
                     console.error('Error:', error);
                     submitBtn.textContent = originalBtnText;
-                    submitBtn.disabled = false;
+                    submitBtn.disabled = "false";
                     loadErrorMessage.textContent = 'An error occurred while loading the JSON file. Check console for details.';
                     loadErrorMessage.style.display = 'block';
                 });
@@ -689,6 +738,102 @@
 
             // Initialize drawing events
             setupDrawingEvents();
+
+            // Update the form submission to handle file upload
+            const uploadForm = document.getElementById('uploadForm');
+            uploadForm.addEventListener('submit', function(e) {
+                e.preventDefault();
+                
+                const formData = new FormData();
+                const email = document.getElementById('email').value;
+                const fileInput = document.getElementById('json_file');
+                
+                if (!email || !fileInput.files[0]) {
+                    const uploadErrorMessage = document.getElementById('uploadErrorMessage');
+                    uploadErrorMessage.textContent = 'Please provide both email and JSON file.';
+                    uploadErrorMessage.style.display = 'block';
+                    return;
+                }
+                
+                formData.append('email', email);
+                formData.append('json_file', fileInput.files[0]);
+                
+                // Show loading state
+                const submitBtn = this.querySelector('button[type="submit"]');
+                const originalBtnText = submitBtn.textContent;
+                submitBtn.textContent = 'Uploading...';
+                submitBtn.disabled = "true";
+                
+                fetch('/upload_json', {
+                    method: 'POST',
+                    body: formData
+                })
+                .then(response => response.json())
+                .then(data => {
+                    submitBtn.textContent = originalBtnText;
+                    submitBtn.disabled = "false";
+                    
+                    if (data.success) {
+                        currentIndex = data.current_index;
+                        totalEntries = data.total_entries;
+                        currentEntry = data.entry;
+                        
+                        // Show the main interface
+                        document.querySelector('.upload-form').style.display = 'none';
+                        document.querySelector('.progress-info').style.display = 'block';
+                        navigation.style.display = 'flex';
+                        infoPanel.style.display = 'block';
+                        imageDisplay.style.display = 'block';
+                        
+                        // Update UI
+                        updateUI();
+                        updateNavigationButtons();
+                        updateProgressInfo();
+                    } else {
+                        const uploadErrorMessage = document.getElementById('uploadErrorMessage');
+                        uploadErrorMessage.textContent = 'Error: ' + data.message;
+                        uploadErrorMessage.style.display = 'block';
+                    }
+                })
+                .catch(error => {
+                    console.error('Error:', error);
+                    submitBtn.textContent = originalBtnText;
+                    submitBtn.disabled = "false";
+                    const uploadErrorMessage = document.getElementById('uploadErrorMessage');
+                    uploadErrorMessage.textContent = 'An error occurred while uploading the file.';
+                    uploadErrorMessage.style.display = 'block';
+                });
+            });
+
+            // Add download button functionality
+            document.getElementById('downloadJson').addEventListener('click', function() {
+                window.location.href = '/download_json';
+            });
+
+            // Function to update progress information
+            function updateProgressInfo() {
+                fetch('/get_entry/' + currentIndex)
+                .then(response => response.json())
+                .then(data => {
+                    if (data.success) {
+                        const totalEntries = data.total_entries;
+                        const visitedEntries = data.entry.visited ? 1 : 0;
+                        
+                        document.getElementById('totalEntries').textContent = totalEntries;
+                        document.getElementById('visitedEntries').textContent = visitedEntries;
+                        document.getElementById('currentPosition').textContent = 
+                            `${currentIndex + 1} / ${totalEntries}`;
+                    }
+                })
+                .catch(error => console.error('Error updating progress:', error));
+            }
+
+            // Update the existing loadEntry function to update progress
+            const originalLoadEntry = loadEntry;
+            loadEntry = function(index) {
+                originalLoadEntry(index);
+                updateProgressInfo();
+            };
         });
     </script>
     <div>
