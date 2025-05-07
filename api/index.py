@@ -440,4 +440,4 @@ def get_annotated_image(filename):
     return send_from_directory(annotated_folder, filename)
 
 if __name__ == '__main__':
-    app.run(debug=True, host='0.0.0.0')
+    app.run(debug=True)
