@@ -1,6 +1,5 @@
 Flask==3.0.3
 pillow==11.2.1
-azure-mgmt-compute
-azure-mgmt-storage
-azure-storage-blob
+azure-storage-blob==12.19.0
+azure-core==1.30.0
 Werkzeug==3.1.3
