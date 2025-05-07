@@ -1,0 +1,703 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Image Annotation Tool</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+        .header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+        }
+        .json-form {
+            margin-bottom: 20px;
+            padding: 15px;
+            background-color: #f5f5f5;
+            border-radius: 5px;
+        }
+        .navigation {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin: 20px 0;
+        }
+        .btn {
+            padding: 8px 16px;
+            background-color: #4CAF50;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            transition: background-color 0.3s;
+        }
+        .btn:hover {
+            background-color: #45a049;
+        }
+        .btn:disabled {
+            background-color: #cccccc;
+            cursor: not-allowed;
+        }
+        #saveControls {
+            position: absolute; 
+            top: 10px; 
+            right: 10px; 
+            z-index: 1000;
+            background-color: rgba(255, 255, 255, 0.8);
+            padding: 10px;
+            border-radius: 5px;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.2);
+        }
+        #saveControls #saveAnnotation {
+            font-size: 16px;
+            font-weight: bold;
+            padding: 10px 20px;
+        }
+        #imageDisplay {
+            position: relative;
+            margin-top: 20px;
+        }
+        #imageContainer {
+            position: relative;
+            display: inline-block;
+            border: 1px solid #ddd;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        #targetImage {
+            max-width: 100%;
+            display: block;
+        }
+        #imageCanvas {
+            position: absolute;
+            top: 0;
+            left: 0;
+            cursor: crosshair;
+        }
+        .draw-instructions {
+            position: absolute;
+            bottom: 10px;
+            left: 10px;
+            background-color: rgba(0,0,0,0.6);
+            color: white;
+            padding: 8px 12px;
+            border-radius: 4px;
+            font-size: 14px;
+            pointer-events: none;
+        }
+        .info-panel {
+            margin: 20px 0;
+            padding: 15px;
+            background-color: #f5f5f5;
+            border-radius: 5px;
+        }
+        .annotation-form {
+            margin-top: 20px;
+            padding: 15px;
+            background-color: #f5f5f5;
+            border-radius: 5px;
+        }
+        .form-group {
+            margin-bottom: 10px;
+        }
+        .form-group label {
+            display: block;
+            margin-bottom: 5px;
+        }
+        .form-group input {
+            width: 100%;
+            padding: 8px;
+            box-sizing: border-box;
+        }
+        #message {
+            margin-top: 10px;
+            padding: 10px;
+            border-radius: 5px;
+        }
+        .success {
+            background-color: #d4edda;
+            color: #155724;
+        }
+        .error {
+            background-color: #f8d7da;
+            color: #721c24;
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>Image Annotation Tool</h1>
+    </div>
+
+    <div class="json-form">
+        <h2>Load JSON File</h2>
+        <form id="jsonForm">
+            <div class="form-group">
+                <label for="json_file">JSON File Path:</label>
+                <input type="text" id="json_file" name="json_file" required placeholder="Enter full path to JSON file">
+                <small>Example: /path/to/your/annotations.json</small>
+            </div>
+            <button type="submit" class="btn">Load JSON</button>
+        </form>
+        <div id="loadErrorMessage" style="color: red; margin-top: 10px; display: none;"></div>
+    </div>
+
+    <div class="navigation" style="display: none;">
+        <button id="prevBtn" class="btn" disabled>Previous</button>
+        <span id="currentPosition">0 / 0</span>
+        <button id="nextBtn" class="btn" disabled>Next</button>
+    </div>
+
+    <div class="info-panel" style="display: none;">
+        <h3>Current Entry Information</h3>
+        <p><strong>Operation ID:</strong> <span id="operation_id"></span></p>
+        <p><strong>Operation Intent:</strong> <span id="operation_intent"></span></p>
+        <p><strong>Entry Number:</strong> <span id="entry_number"></span></p>
+        <p><strong>Image Path:</strong> <span id="image_path"></span></p>
+        <p><strong>Current Tag:</strong> <span id="current_tag"></span></p>
+        <div class="form-group">
+            <label for="tagSelect"><strong>Select or Enter Tag:</strong></label>
+            <div style="display: flex; gap: 10px;">
+                <select id="tagSelect" style="flex: 1;">
+                    <option value="">Select a tag...</option>
+                </select>
+                <input type="text" id="customTag" placeholder="Enter custom tag" style="flex: 1;">
+            </div>
+        </div>
+    </div>
+
+    <div id="imageDisplay" style="display: none;">
+        <div id="imageContainer">
+            <img id="targetImage" src="" alt="Image to annotate">
+            <canvas id="imageCanvas"></canvas>
+            <div class="draw-instructions">Click and drag to create a new annotation</div>
+        </div>
+    </div>
+
+    <!-- <div id="saveControls" style="display: none; position: absolute; top: 10px; right: 10px; z-index: 1000;">
+        <button type="button" id="saveAnnotation" class="btn">Save</button>
+        <div id="message" style="margin-top: 10px;"></div>
+        <div id="saveStatus" style="display: none; margin-top: 10px; background-color: rgba(255, 255, 255, 0.8); padding: 8px; border-radius: 4px;">
+            <p style="margin: 0;">Saved to: <span id="savedFile"></span></p>
+        </div>
+    </div> -->
+
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            // DOM Elements
+            const jsonForm = document.getElementById('jsonForm');
+            const navigation = document.querySelector('.navigation');
+            const infoPanel = document.querySelector('.info-panel');
+            const imageDisplay = document.getElementById('imageDisplay');
+            const targetImage = document.getElementById('targetImage');
+            const imageCanvas = document.getElementById('imageCanvas');
+            const imageContainer = document.getElementById('imageContainer');
+            const saveControls = document.getElementById('saveControls');
+            const prevBtn = document.getElementById('prevBtn');
+            const nextBtn = document.getElementById('nextBtn');
+            const currentPosition = document.getElementById('currentPosition');
+            const operationIdSpan = document.getElementById('operation_id');
+            const operationIntentSpan = document.getElementById('operation_intent');
+            const entryNumberSpan = document.getElementById('entry_number');
+            const imagePathSpan = document.getElementById('image_path');
+            const saveAnnotationBtn = document.getElementById('saveAnnotation');
+            const messageDiv = document.getElementById('message');
+
+            // State variables
+            let currentIndex = 0;
+            let totalEntries = 0;
+            let currentEntry = null;
+            let drawing = false;
+            let startX, startY, endX, endY;
+            let context;
+
+            // Drawing and canvas setup
+            function setupCanvas() {
+                if (!targetImage) return;
+                
+                // Load full-sized image first
+                targetImage.onload = function() {
+                    // Store the natural dimensions of the image
+                    const naturalWidth = targetImage.naturalWidth;
+                    const naturalHeight = targetImage.naturalHeight;
+                    
+                    // Set canvas dimensions to match the natural image size
+                    imageCanvas.width = naturalWidth;
+                    imageCanvas.height = naturalHeight;
+                    
+                    // Calculate the scale between natural and displayed image size
+                    const displayedWidth = targetImage.clientWidth;
+                    const displayedHeight = targetImage.clientHeight;
+                    
+                    // Store the scale factors as data attributes for later use
+                    imageCanvas.dataset.scaleX = naturalWidth / displayedWidth;
+                    imageCanvas.dataset.scaleY = naturalHeight / displayedHeight;
+                    
+                    // Adjust canvas CSS size to match displayed image size
+                    imageCanvas.style.width = displayedWidth + 'px';
+                    imageCanvas.style.height = displayedHeight + 'px';
+                    
+                    // Get the context for drawing
+                    context = imageCanvas.getContext('2d');
+                    
+                    // Draw existing bounding box if available
+                    if (currentEntry && currentEntry.element_rect) {
+                        const rect = currentEntry.element_rect;
+                        drawBox(rect.x, rect.y, rect.width, rect.height, 'green');
+                    }
+                    
+                    // Show UI elements now that image is loaded
+                    if (saveControls) {
+                        saveControls.style.display = 'none';
+                    }
+                    
+                    console.log(`Image loaded: natural size ${naturalWidth}x${naturalHeight}, displayed size ${displayedWidth}x${displayedHeight}`);
+                    console.log(`Scale factors: X: ${imageCanvas.dataset.scaleX}, Y: ${imageCanvas.dataset.scaleY}`);
+                };
+            }
+
+            function drawBox(x, y, width, height, color) {
+                if (!context) return;
+                
+                context.strokeStyle = color;
+                context.lineWidth = 2;
+                context.strokeRect(x, y, width, height);
+            }
+
+            // Event handling for canvas drawing
+            function setupDrawingEvents() {
+                imageCanvas.addEventListener('mousedown', function(e) {
+                    // Get the position relative to the canvas
+                    const rect = imageCanvas.getBoundingClientRect();
+                    const scaleX = parseFloat(imageCanvas.dataset.scaleX) || 1;
+                    const scaleY = parseFloat(imageCanvas.dataset.scaleY) || 1;
+                    
+                    // Calculate position in the natural image coordinates
+                    startX = (e.clientX - rect.left) * scaleX;
+                    startY = (e.clientY - rect.top) * scaleY;
+                    
+                    drawing = true;
+                    console.log(`Mouse down at client: (${e.clientX - rect.left}, ${e.clientY - rect.top}), scaled: (${startX}, ${startY})`);
+                });
+
+                imageCanvas.addEventListener('mousemove', function(e) {
+                    if (!drawing) return;
+                    
+                    // Get the position relative to the canvas
+                    const rect = imageCanvas.getBoundingClientRect();
+                    const scaleX = parseFloat(imageCanvas.dataset.scaleX) || 1;
+                    const scaleY = parseFloat(imageCanvas.dataset.scaleY) || 1;
+                    
+                    // Calculate position in the natural image coordinates
+                    endX = (e.clientX - rect.left) * scaleX;
+                    endY = (e.clientY - rect.top) * scaleY;
+                    
+                    // Clear the canvas and redraw
+                    context.clearRect(0, 0, imageCanvas.width, imageCanvas.height);
+                    
+                    // Redraw existing box from element_rect if available
+                    if (currentEntry && currentEntry.element_rect) {
+                        const rect = currentEntry.element_rect;
+                        drawBox(rect.x, rect.y, rect.width, rect.height, 'green');
+                    }
+                    
+                    // Draw the new box being created
+                    let width = endX - startX;
+                    let height = endY - startY;
+                    drawBox(startX, startY, width, height, 'red');
+                });
+
+                imageCanvas.addEventListener('mouseup', function(e) {
+                    if (!drawing) return;
+                    
+                    drawing = false;
+                    
+                    // Get the position relative to the canvas
+                    const rect = imageCanvas.getBoundingClientRect();
+                    const scaleX = parseFloat(imageCanvas.dataset.scaleX) || 1;
+                    const scaleY = parseFloat(imageCanvas.dataset.scaleY) || 1;
+                    
+                    // Calculate position in the natural image coordinates
+                    endX = (e.clientX - rect.left) * scaleX;
+                    endY = (e.clientY - rect.top) * scaleY;
+                    
+                    // Calculate width and height (can be negative)
+                    let width = endX - startX;
+                    let height = endY - startY;
+                    
+                    // Adjust start position and dimensions if width or height is negative
+                    let adjustedX = startX;
+                    let adjustedY = startY;
+                    
+                    if (width < 0) {
+                        adjustedX = endX;
+                        width = Math.abs(width);
+                    }
+                    
+                    if (height < 0) {
+                        adjustedY = endY;
+                        height = Math.abs(height);
+                    }
+                    
+                    // Minimum size check (to avoid tiny accidental selections)
+                    if (width < 5 || height < 5) {
+                        // Clear the canvas and only redraw the existing box
+                        context.clearRect(0, 0, imageCanvas.width, imageCanvas.height);
+                        if (currentEntry && currentEntry.element_rect) {
+                            const rect = currentEntry.element_rect;
+                            drawBox(rect.x, rect.y, rect.width, rect.height, 'green');
+                        }
+                        return;
+                    }
+                    
+                    // Update the global start/end coordinates for saving
+                    startX = adjustedX;
+                    startY = adjustedY;
+                    
+                    // Clear the canvas and redraw everything
+                    context.clearRect(0, 0, imageCanvas.width, imageCanvas.height);
+                    
+                    // Redraw existing box
+                    if (currentEntry && currentEntry.element_rect) {
+                        const rect = currentEntry.element_rect;
+                        drawBox(rect.x, rect.y, rect.width, rect.height, 'green');
+                    }
+                    
+                    // Draw the new box
+                    drawBox(adjustedX, adjustedY, width, height, 'red');
+                    
+                    console.log(`Final box: (${adjustedX}, ${adjustedY}) - width: ${width}, height: ${height}`);
+                    
+                    // Show the save controls immediately
+                    if (saveControls) {
+                        saveControls.style.display = 'block';
+                    } else {
+                        console.error("saveControls element not found!");
+                    }
+                });
+            }
+
+            // Load JSON file
+            jsonForm.addEventListener('submit', function(e) {
+                e.preventDefault();
+                
+                const jsonFilePath = document.getElementById('json_file').value;
+                const loadErrorMessage = document.getElementById('loadErrorMessage');
+                
+                if (!jsonFilePath) {
+                    loadErrorMessage.textContent = 'Please enter a JSON file path.';
+                    loadErrorMessage.style.display = 'block';
+                    return;
+                }
+                
+                // Show loading state
+                const submitBtn = this.querySelector('button[type="submit"]');
+                const originalBtnText = submitBtn.textContent;
+                submitBtn.textContent = 'Loading...';
+                submitBtn.disabled = true;
+                loadErrorMessage.style.display = 'none';
+                
+                fetch('/load_json', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/x-www-form-urlencoded',
+                    },
+                    body: 'json_file=' + encodeURIComponent(jsonFilePath)
+                })
+                .then(response => response.json())
+                .then(data => {
+                    // Reset button state
+                    submitBtn.textContent = originalBtnText;
+                    submitBtn.disabled = false;
+                    
+                    if (data.success) {
+                        currentIndex = data.current_index;
+                        totalEntries = data.total_entries;
+                        currentEntry = data.entry;
+                        
+                        // Update navigation and display
+                        navigation.style.display = 'flex';
+                        infoPanel.style.display = 'block';
+                        imageDisplay.style.display = 'block';
+                        
+                        // Update UI with first entry
+                        updateUI();
+                        
+                        // Enable/disable navigation buttons
+                        updateNavigationButtons();
+                        
+                        // Hide error message if it was shown before
+                        loadErrorMessage.style.display = 'none';
+                    } else {
+                        // Show error message
+                        loadErrorMessage.textContent = 'Error: ' + data.message;
+                        loadErrorMessage.style.display = 'block';
+                    }
+                })
+                .catch(error => {
+                    console.error('Error:', error);
+                    submitBtn.textContent = originalBtnText;
+                    submitBtn.disabled = false;
+                    loadErrorMessage.textContent = 'An error occurred while loading the JSON file. Check console for details.';
+                    loadErrorMessage.style.display = 'block';
+                });
+            });
+
+            // Navigation - Previous button
+            prevBtn.addEventListener('click', function() {
+                if (currentIndex > 0) {
+                    // Save current annotation before navigating
+                    saveCurrentAnnotation().then(() => {
+                        loadEntry(currentIndex - 1);
+                    }).catch(error => {
+                        console.error('Error saving before navigation:', error);
+                        // Still proceed with navigation even if save fails
+                        loadEntry(currentIndex - 1);
+                    });
+                }
+            });
+
+            // Navigation - Next button
+            nextBtn.addEventListener('click', function() {
+                if (currentIndex < totalEntries - 1) {
+                    // Save current annotation before navigating
+                    saveCurrentAnnotation().then(() => {
+                        loadEntry(currentIndex + 1);
+                    }).catch(error => {
+                        console.error('Error saving before navigation:', error);
+                        // Still proceed with navigation even if save fails
+                        loadEntry(currentIndex + 1);
+                    });
+                }
+            });
+
+            // Function to save current annotation
+            function saveCurrentAnnotation() {
+                return new Promise((resolve, reject) => {
+                    if (!currentEntry) {
+                        resolve(); // Nothing to save
+                        return;
+                    }
+
+                    // Get the selected or custom tag
+                    const customTagInput = document.getElementById('customTag');
+                    const selectedTag = customTagInput.value.trim();
+                    
+                    // Check if we have valid coordinates from drawing
+                    let x, y, width, height;
+                    if (typeof startX !== 'undefined' && typeof startY !== 'undefined' && 
+                        typeof endX !== 'undefined' && typeof endY !== 'undefined') {
+                        // Calculate width and height (ensure positive values)
+                        width = Math.abs(endX - startX);
+                        height = Math.abs(endY - startY);
+                        
+                        // Ensure x and y are the top-left corner
+                        x = startX < endX ? startX : endX;
+                        y = startY < endY ? startY : endY;
+                    } else {
+                        // Use original values if no new drawing was made
+                        x = currentEntry.element_rect.x;
+                        y = currentEntry.element_rect.y;
+                        width = currentEntry.element_rect.width;
+                        height = currentEntry.element_rect.height;
+                    }
+                    
+                    // Get image path from either source
+                    const imagePath = currentEntry.image_path || currentEntry.tagified_image_url;
+                    
+                    const annotationData = {
+                        operation_id: currentEntry.operation_id,
+                        operation_intent: currentEntry.operation_intent,
+                        element_rect: {
+                            x: x,
+                            y: y,
+                            width: width,
+                            height: height
+                        },
+                        image_path: imagePath,
+                        entry_number: currentEntry.entry_number,
+                        tag: selectedTag || currentEntry.tag
+                    };
+                    
+                    fetch('/save_annotation', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                        },
+                        body: JSON.stringify(annotationData)
+                    })
+                    .then(response => response.json())
+                    .then(data => {
+                        if (data.success) {
+                            resolve();
+                        } else {
+                            reject(new Error(data.message));
+                        }
+                    })
+                    .catch(error => {
+                        reject(error);
+                    });
+                });
+            }
+
+            // Load a specific entry
+            function loadEntry(index) {
+                const messageDiv = document.getElementById('message');
+                messageDiv.style.display = 'none';
+                
+                fetch(`/get_entry/${index}`)
+                .then(response => {
+                    if (!response.ok) {
+                        return response.json().then(data => {
+                            throw new Error(data.message || 'Failed to load entry');
+                        });
+                    }
+                    return response.json();
+                })
+                .then(data => {
+                    if (data.success) {
+                        currentIndex = data.current_index;
+                        totalEntries = data.total_entries;
+                        currentEntry = data.entry;
+                        
+                        // Update UI
+                        updateUI();
+                        
+                        // Update navigation buttons
+                        updateNavigationButtons();
+                    } else {
+                        throw new Error(data.message || 'Failed to load entry');
+                    }
+                })
+                .catch(error => {
+                    console.error('Error:', error);
+                    messageDiv.textContent = error.message;
+                    messageDiv.style.color = "red";
+                    messageDiv.style.display = "block";
+                });
+            }
+
+            // Update the UI with current entry data
+            function updateUI() {
+                if (!currentEntry) return;
+                
+                // Update info panel
+                operationIdSpan.textContent = currentEntry.operation_id;
+                operationIntentSpan.textContent = currentEntry.operation_intent;
+                entryNumberSpan.textContent = currentEntry.entry_number;
+                
+                // Handle both image_path and tagified_image_url
+                let imagePath = currentEntry.image_path || currentEntry.tagified_image_url;
+                imagePathSpan.textContent = imagePath;
+                
+                // Update tag information
+                const currentTagSpan = document.getElementById('current_tag');
+                const tagSelect = document.getElementById('tagSelect');
+                const customTagInput = document.getElementById('customTag');
+                
+                // Clear previous options
+                tagSelect.innerHTML = '<option value="">Select a tag...</option>';
+                
+                // Display current tag if it exists
+                if (currentEntry.tag) {
+                    currentTagSpan.textContent = currentEntry.tag;
+                    customTagInput.value = currentEntry.tag;
+                } else {
+                    currentTagSpan.textContent = 'Not set';
+                    customTagInput.value = '';
+                }
+                
+                // Populate tag_ids dropdown if available
+                if (currentEntry.tag_ids && Array.isArray(currentEntry.tag_ids)) {
+                    currentEntry.tag_ids.forEach(tag => {
+                        const option = document.createElement('option');
+                        option.value = tag;
+                        option.textContent = tag;
+                        tagSelect.appendChild(option);
+                    });
+                }
+                
+                // Add event listeners for tag selection
+                tagSelect.addEventListener('change', function() {
+                    if (this.value) {
+                        customTagInput.value = this.value;
+                    }
+                });
+                
+                // Update image source
+                console.log(imagePath);
+                let imageName;
+                if (imagePath.includes('http')) {
+                    // If it's a full URL, extract the filename from the last part
+                    imageName = imagePath.split('/').pop();
+                } else {
+                    // If it's a local path, just get the filename
+                    imageName = imagePath.split('/').pop();
+                }
+                targetImage.src = `/download_images/${imageName}`;
+                
+                // Update position indicator
+                currentPosition.textContent = `${currentIndex + 1} / ${totalEntries}`;
+                
+                // Setup canvas after image loads
+                setupCanvas();
+                
+                // Hide annotation form until a new box is drawn
+                messageDiv.textContent = '';
+            }
+
+            // Update navigation button states
+            function updateNavigationButtons() {
+                prevBtn.disabled = currentIndex === 0;
+                nextBtn.disabled = currentIndex === totalEntries - 1;
+            }
+
+            // Update the save button to use the new saveCurrentAnnotation function
+            saveAnnotationBtn.addEventListener('click', function() {
+                saveCurrentAnnotation()
+                    .then(() => {
+                        messageDiv.textContent = "Saved!";
+                        messageDiv.style.color = "green";
+                        
+                        // Display the save status
+                        document.getElementById('savedFile').textContent = data.file;
+                        document.getElementById('saveStatus').style.display = 'block';
+                        
+                        // Hide the save controls after a delay
+                        setTimeout(() => {
+                            document.getElementById('saveControls').style.display = 'none';
+                        }, 3000);
+                    })
+                    .catch(error => {
+                        console.error('Error:', error);
+                        messageDiv.textContent = 'Error saving annotation';
+                        messageDiv.style.color = "red";
+                    });
+            });
+
+            // Generate a UUID for operation_id
+            function generateUUID() {
+                return 'xxxxxxxxxxxxxxxx'.replace(/[x]/g, function(c) {
+                    const r = Math.random() * 16 | 0;
+                    return r.toString(16);
+                });
+            }
+
+            // Initialize drawing events
+            setupDrawingEvents();
+        });
+    </script>
+    <div>
+    <!-- div id="saveControls" style="display: none; position: absolute; top: 10px; right: 10px; z-index: 1000;"> -->
+    <button type="button" id="saveAnnotation" class="btn">Save</button>
+    <div id="message" style="margin-top: 10px;"></div>
+    <div id="saveStatus" style="display: none; margin-top: 10px; background-color: rgba(255, 255, 255, 0.8); padding: 8px; border-radius: 4px;">
+        <p style="margin: 0;">Saved to: <span id="savedFile"></span></p>
+    </div>
+</div>
+</body>
+</html>
